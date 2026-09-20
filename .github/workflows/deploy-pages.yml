@@ -36,10 +36,13 @@ jobs:
       - name: Build static site
         run: npm run build
 
+      - name: Prepare project Pages artifact
+        run: node scripts/prepare-github-pages.mjs
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
-          path: dist/client
+          path: dist/client/crossword
 
   deploy:
     environment:

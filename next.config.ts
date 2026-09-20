@@ -5,14 +5,13 @@ const isProjectPage =
   process.env.GITHUB_ACTIONS === "true" &&
   repository.length > 0 &&
   !repository.endsWith(".github.io");
-const basePath = isProjectPage ? "/" + repository : "";
+const assetPrefix = isProjectPage ? "/" + repository : "";
 
 const nextConfig: NextConfig = {
   output: "export",
   trailingSlash: true,
   images: { unoptimized: true },
-  basePath,
-  assetPrefix: basePath || undefined,
+  assetPrefix: assetPrefix || undefined,
 };
 
 export default nextConfig;

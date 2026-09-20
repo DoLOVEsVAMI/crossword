@@ -5,8 +5,8 @@ export const metadata: Metadata = {
   title: "Розовый кроссворд",
   description: "Уютные тематические кроссворды, которые помнят ваш прогресс.",
   icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
+    icon: "./favicon.svg",
+    shortcut: "./favicon.svg",
   },
 };
 
