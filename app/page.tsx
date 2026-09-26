@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
+  Eraser,
   Lightbulb,
   RotateCcw,
   Settings2,
@@ -131,6 +132,7 @@ export default function Home() {
   const [currentPuzzleId, setCurrentPuzzleId] = useState(DEFAULT_PUZZLES[0].id);
   const [values, setValues] = useState<Record<string, string>>({});
   const [selectedWordId, setSelectedWordId] = useState("");
+  const [focusedCellKey, setFocusedCellKey] = useState("");
   const [hintsLeft, setHintsLeft] = useState(3);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [checked, setChecked] = useState(false);
@@ -200,6 +202,7 @@ export default function Home() {
       setChecked(false);
       setLoadedPuzzleKey(progressStorageKey);
       setSelectedWordId(grid.placed[0]?.id || "");
+      setFocusedCellKey("");
       setStatus("Прогресс сохраняется автоматически");
     }, 0);
 
@@ -230,15 +233,57 @@ export default function Home() {
       col: word.col + (word.direction === "across" ? index : 0),
     }));
 
-  const focusCell = (row: number, col: number) => {
+  const revealCell = (row: number, col: number, shouldFocus: boolean) => {
+    const key = cellKey(row, col);
     requestAnimationFrame(() => {
       const input = document.querySelector<HTMLInputElement>(
-        '[data-cell="' + cellKey(row, col) + '"]',
+        '[data-cell="' + key + '"]',
       );
-      input?.focus();
-      input?.select();
+      const scroller = input?.closest<HTMLElement>(".grid-scroll");
+      const cell = input?.closest<HTMLElement>(".crossword-cell");
+      if (input && cell && scroller) {
+        scroller.scrollTo({
+          left:
+            cell.offsetLeft + cell.offsetWidth / 2 - scroller.clientWidth / 2,
+          behavior: "smooth",
+        });
+      }
+      if (shouldFocus) {
+        input?.focus({ preventScroll: true });
+        input?.select();
+      }
     });
   };
+
+  const focusCell = (row: number, col: number) => {
+    setFocusedCellKey(cellKey(row, col));
+    revealCell(row, col, true);
+  };
+
+  useEffect(() => {
+    const firstWord = grid.placed[0];
+    if (!firstWord) return;
+    const firstRow = firstWord.row;
+    const firstCol = firstWord.col;
+    const frameId = requestAnimationFrame(() => {
+      const input = document.querySelector<HTMLInputElement>(
+        '[data-cell="' + cellKey(firstRow, firstCol) + '"]',
+      );
+      const scroller = input?.closest<HTMLElement>(".grid-scroll");
+      const cell = input?.closest<HTMLElement>(".crossword-cell");
+      if (input && cell && scroller) {
+        scroller.scrollLeft =
+          cell.offsetLeft + cell.offsetWidth / 2 - scroller.clientWidth / 2;
+      }
+    });
+    return () => cancelAnimationFrame(frameId);
+  }, [grid.placed, progressStorageKey]);
+
+  const getCellWord = (cell: GridCell) =>
+    grid.placed.find(
+      (item) =>
+        item.id === selectedWordId && cell.wordIds.includes(item.id),
+    ) || grid.placed.find((item) => cell.wordIds.includes(item.id));
 
   const chooseCellWord = (cell: GridCell) => {
     const nextWordId =
@@ -276,15 +321,17 @@ export default function Home() {
     } else if (value) {
       playTone("tap", soundEnabled);
     }
-    if (!value) return;
-    const word =
-      grid.placed.find((item) => item.id === selectedWordId) ||
-      grid.placed.find((item) => cell.wordIds.includes(item.id));
+    const word = getCellWord(cell);
     if (!word) return;
     const positions = wordCells(word);
     const index = positions.findIndex(
       (position) => position.row === cell.row && position.col === cell.col,
     );
+    if (!value) {
+      const previous = positions[index - 1];
+      if (previous) focusCell(previous.row, previous.col);
+      return;
+    }
     const next = positions[index + 1];
     if (next) focusCell(next.row, next.col);
   };
@@ -295,9 +342,7 @@ export default function Home() {
   ) => {
     const key = cellKey(cell.row, cell.col);
     if (event.key === "Backspace" && !values[key]) {
-      const word =
-        grid.placed.find((item) => item.id === selectedWordId) ||
-        grid.placed.find((item) => cell.wordIds.includes(item.id));
+      const word = getCellWord(cell);
       if (!word) return;
       const positions = wordCells(word);
       const index = positions.findIndex(
@@ -312,6 +357,13 @@ export default function Home() {
         }));
         focusCell(previous.row, previous.col);
       }
+      return;
+    }
+    if (event.key === "Delete" && values[key]) {
+      event.preventDefault();
+      setValues((current) => ({ ...current, [key]: "" }));
+      setChecked(false);
+      setStatus("Буква стёрта");
       return;
     }
     const arrows: Record<string, [number, number]> = {
@@ -332,12 +384,13 @@ export default function Home() {
   const selectClue = (word: PlacedWord, shouldFocus = true) => {
     setSelectedWordId(word.id);
     setCluePickerOpen(false);
-    if (!shouldFocus) return;
     const target =
       wordCells(word).find(
         (position) => !values[cellKey(position.row, position.col)],
       ) || wordCells(word)[0];
-    focusCell(target.row, target.col);
+    setFocusedCellKey(cellKey(target.row, target.col));
+    if (shouldFocus) focusCell(target.row, target.col);
+    else revealCell(target.row, target.col, false);
   };
 
   const moveClue = (offset: number) => {
@@ -351,11 +404,17 @@ export default function Home() {
   const checkPuzzle = () => {
     setChecked(true);
     const filled = Object.values(values).filter(Boolean).length;
+    const wrong = Object.entries(grid.cells).filter(
+      ([key, cell]) => Boolean(values[key]) && values[key] !== cell.letter,
+    ).length;
     if (progress === 100) {
       setStatus("Готово! Кроссворд разгадан ✦");
       playTone("success", soundEnabled);
     } else if (filled === 0) {
       setStatus("Сначала впишите хотя бы одну букву");
+    } else if (wrong === 0) {
+      setStatus("Всё верно! Осталось заполнить остальные клетки");
+      playTone("tap", soundEnabled);
     } else {
       setStatus("Почти! Ошибочные буквы отмечены розовым");
       playTone("error", soundEnabled);
@@ -379,6 +438,46 @@ export default function Home() {
     setStatus("Открыли одну букву");
     playTone("success", soundEnabled);
     focusCell(target.row, target.col);
+  };
+
+  const eraseCurrentCell = () => {
+    const focusedCell = focusedCellKey ? grid.cells[focusedCellKey] : undefined;
+    const word = focusedCell ? getCellWord(focusedCell) : selectedWord;
+    if (!word) return;
+    const positions = wordCells(word);
+    const focusedIndex = focusedCell
+      ? positions.findIndex(
+          (position) =>
+            position.row === focusedCell.row && position.col === focusedCell.col,
+        )
+      : -1;
+    const fallbackIndex = positions.reduce(
+      (lastIndex, position, index) =>
+        values[cellKey(position.row, position.col)] ? index : lastIndex,
+      -1,
+    );
+    const focusedIsEmpty =
+      focusedIndex >= 0 &&
+      !values[cellKey(positions[focusedIndex].row, positions[focusedIndex].col)];
+    const targetIndex =
+      focusedIsEmpty && focusedIndex > 0
+        ? focusedIndex - 1
+        : focusedIndex >= 0
+          ? focusedIndex
+          : fallbackIndex;
+    if (targetIndex < 0) {
+      setStatus("В выбранном слове пока нечего стирать");
+      focusCell(positions[0].row, positions[0].col);
+      return;
+    }
+    const target = positions[targetIndex];
+    const targetKey = cellKey(target.row, target.col);
+    const hadValue = Boolean(values[targetKey]);
+    setValues((current) => ({ ...current, [targetKey]: "" }));
+    setChecked(false);
+    setStatus(hadValue ? "Буква стёрта" : "В этой клетке пока нет буквы");
+    const previous = positions[Math.max(0, targetIndex - 1)];
+    focusCell(previous.row, previous.col);
   };
 
   const resetProgress = () => {
@@ -417,7 +516,11 @@ export default function Home() {
       setAdminText("");
     } catch (error) {
       setAdminMessage(
-        error instanceof Error ? error.message : "Проверьте формат JSON.",
+        error instanceof SyntaxError
+          ? "JSON не удалось прочитать. Проверьте кавычки, запятые и скобки."
+          : error instanceof Error
+            ? error.message
+            : "Проверьте формат JSON.",
       );
     }
   };
@@ -621,7 +724,11 @@ export default function Home() {
           </Button>
           <Dialog open={adminOpen} onOpenChange={setAdminOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline" className="admin-button">
+              <Button
+                variant="outline"
+                className="admin-button"
+                aria-label="Для автора: добавить тему из JSON"
+              >
                 <Settings2 /><span>Для автора</span>
               </Button>
             </DialogTrigger>
@@ -707,14 +814,29 @@ export default function Home() {
 
       <section className="game-layout">
         <div className="board-card">
+          {grid.cols > 16 && (
+            <p className="grid-scroll-hint" aria-hidden="true">
+              Проведите по сетке влево или вправо
+            </p>
+          )}
           <div
-            className="crossword-grid"
-            style={{
-              gridTemplateColumns: "repeat(" + grid.cols + ", minmax(0, 1fr))",
-              width: "min(100%, " + grid.cols * 48 + "px)",
-            }}
-            aria-label={"Кроссворд «" + currentPuzzle.title + "»"}
+            className="grid-scroll"
+            role="region"
+            tabIndex={0}
+            aria-label={"Прокручиваемое поле кроссворда «" + currentPuzzle.title + "»"}
           >
+            <div
+              className="crossword-grid"
+              style={{
+                gridTemplateColumns: "repeat(" + grid.cols + ", minmax(0, 1fr))",
+                width:
+                  "clamp(" +
+                  grid.cols * 32 +
+                  "px, 100%, " +
+                  grid.cols * 48 +
+                  "px)",
+              }}
+            >
             {Array.from({ length: grid.rows * grid.cols }).map((_, index) => {
               const row = Math.floor(index / grid.cols);
               const col = index % grid.cols;
@@ -740,7 +862,12 @@ export default function Home() {
                     value={values[key] || ""}
                     onChange={(event) => handleCellChange(cell, event.target.value)}
                     onKeyDown={(event) => handleCellKeyDown(event, cell)}
-                    onFocus={() => chooseCellWord(cell)}
+                    onFocus={() => {
+                      setFocusedCellKey(key);
+                      if (!cell.wordIds.includes(selectedWordId)) {
+                        setSelectedWordId(cell.wordIds[0]);
+                      }
+                    }}
                     maxLength={1}
                     inputMode="text"
                     autoComplete="off"
@@ -749,6 +876,7 @@ export default function Home() {
                 </label>
               );
             })}
+            </div>
           </div>
 
           {selectedWord && (
@@ -885,6 +1013,13 @@ export default function Home() {
               </AlertDialog>
             </div>
             <div className="board-actions">
+              <Button
+                variant="outline"
+                onClick={eraseCurrentCell}
+                className="erase-button"
+              >
+                <Eraser />Стереть
+              </Button>
               <Button
                 variant="outline"
                 onClick={useHint}

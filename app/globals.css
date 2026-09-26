@@ -406,9 +406,46 @@ label {
 
 .crossword-grid {
   display: grid;
+  flex: 0 0 auto;
   gap: clamp(2px, 0.35vw, 4px);
   margin: auto;
   animation: board-in 650ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.grid-scroll {
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 10px 4px 14px;
+  scrollbar-color: rgba(232, 82, 135, 0.45) rgba(255, 255, 255, 0.48);
+  scrollbar-width: thin;
+  scroll-padding-inline: 24px;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.grid-scroll:focus-visible {
+  outline: 3px solid rgba(232, 82, 135, 0.2);
+  outline-offset: 3px;
+  border-radius: 12px;
+}
+
+.grid-scroll-hint {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0 0 2px;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.grid-scroll-hint::before {
+  content: "↔";
+  color: var(--pink-500);
+  font-size: 1rem;
 }
 
 .blocked-cell,
@@ -653,6 +690,7 @@ label {
   gap: 9px;
 }
 
+.erase-button,
 .hint-button,
 .check-button {
   height: 44px !important;
@@ -1118,8 +1156,13 @@ label {
     border-radius: 20px;
   }
 
-  .crossword-grid {
-    width: 100% !important;
+  .grid-scroll {
+    padding-top: 7px;
+    padding-bottom: 12px;
+  }
+
+  .grid-scroll-hint {
+    display: flex;
   }
 
   .clue-navigator {
@@ -1166,6 +1209,10 @@ label {
 
   .board-actions button {
     width: 100%;
+  }
+
+  .erase-button {
+    grid-column: 1 / -1;
   }
 
   .clue-scroll {
@@ -1278,6 +1325,7 @@ label {
     gap: 7px;
   }
 
+  .erase-button,
   .hint-button,
   .check-button {
     padding-inline: 10px !important;
@@ -1291,6 +1339,10 @@ label {
 @media (max-width: 359px) {
   .board-actions {
     grid-template-columns: 1fr;
+  }
+
+  .erase-button {
+    grid-column: auto;
   }
 
   .page-footer > span:nth-child(2) {
