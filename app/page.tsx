@@ -925,7 +925,12 @@ export default function Home() {
                       Нажмите на вопрос — нужное слово подсветится в сетке.
                     </DialogDescription>
                   </DialogHeader>
-                  <div className="clue-picker-list">
+                  <div
+                    className="clue-picker-list"
+                    role="region"
+                    aria-label="Список вопросов"
+                    tabIndex={0}
+                  >
                     {(["across", "down"] as Direction[]).map((direction) => {
                       const words = grid.placed.filter(
                         (word) => word.direction === direction,
